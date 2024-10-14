@@ -31,7 +31,17 @@ export const route: Route = {
     parameters: {
         user_id: 'user id, length 24 characters',
         fulltext: {
-            description: '是否获取全文',
+            description: '是否获取全文, 还是仅图片',
+            options: [
+                {
+                    value: 'fulltext',
+                    label: 'fulltext',
+                },
+                {
+                    value: 'images',
+                    label: 'images',
+                },
+            ],
             default: '',
         },
     },
@@ -41,9 +51,11 @@ async function handler(ctx) {
     const userId = ctx.req.param('user_id');
     const url = `https://www.xiaohongshu.com/user/profile/${userId}`;
 
-    if (config.xiaohongshu.cookie && ctx.req.param('fulltext')) {
+    const fulltext = ctx.req.param('fulltext');
+
+    if (config.xiaohongshu.cookie && fulltext) {
         const user = await getUser(url, config.xiaohongshu.cookie);
-        const notes = await renderNotesFulltext(user.notes, url);
+        const notes = await renderNotesFulltext(user.notes, url, fulltext);
         return {
             title: `${user.userPageData.basicInfo.nickname} - 笔记 • 小红书 / RED`,
             description: user.userPageData.basicInfo.desc,
@@ -84,12 +96,12 @@ async function getUser(url, cookie) {
     return state.user;
 }
 
-async function renderNotesFulltext(notes, url) {
+async function renderNotesFulltext(notes: any, url: string, fulltext: string) {
     const data: any[] = [];
     const promises = notes.flatMap((note) =>
         note.map(async ({ noteCard }) => {
             const link = `${url}/${noteCard.noteId}`;
-            const { title, description } = await getFullNote(link);
+            const { title, description } = await getFullNote(link, fulltext);
             return {
                 title,
                 link,
@@ -103,7 +115,7 @@ async function renderNotesFulltext(notes, url) {
     return data;
 }
 
-async function getFullNote(link) {
+async function getFullNote(link, fulltext: string) {
     const cookie = config.xiaohongshu.cookie;
     const data = (await cache.tryGet(link, async () => {
         const res = await got(link, {
@@ -129,7 +141,7 @@ async function getFullNote(link) {
         desc = desc.replaceAll(/\[.*?\]/g, '');
         desc = desc.replaceAll(/#(.*?)#/g, '#$1');
         desc = desc.replaceAll('\n', '<br>');
-        const description = `${images.map((image) => `<img src="${image}">`).join('')}<br>${title}<br>${desc}`;
+        const description = 'images' === fulltext ? String(images.map((image) => `<img src="${image}">`).join('')) : `${images.map((image) => `<img src="${image}">`).join('')}<br>${title}<br>${desc}`;
         return {
             title,
             description,
